@@ -11,6 +11,9 @@ target_include_directories(mut PRIVATE
     ${CMAKE_SOURCE_DIR}/Include
     ${CMAKE_SOURCE_DIR}/Include/GLFW
     ${CMAKE_SOURCE_DIR}/Include/imgui
+    ${CMAKE_SOURCE_DIR}/Include/glad
+    ${CMAKE_SOURCE_DIR}/Include/KHR
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 # Link directories
@@ -20,6 +23,7 @@ target_link_directories(mut PRIVATE ${CMAKE_SOURCE_DIR}/lib/GLFW)
 target_link_libraries(mut PRIVATE
     glfw3.lib
     opengl32.lib # OpenGL is provided by the system on Windows
+    Shcore.lib
 )
 
 # Add ImGui source files
@@ -31,7 +35,8 @@ target_sources(mut PRIVATE
     ${CMAKE_SOURCE_DIR}/src/imgui/imgui_tables.cpp
     ${CMAKE_SOURCE_DIR}/src/imgui/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/src/imgui/imgui_impl_opengl3.cpp
-)
+    ${CMAKE_SOURCE_DIR}/src/glad/glad.c
+ "platform_window.cpp" "dpi_manager.cpp" "gui_layer.cpp")
 
 # Copy DLLs to the output directory
 add_custom_command(TARGET mut POST_BUILD

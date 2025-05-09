@@ -1,89 +1,46 @@
-﻿// mut.cpp : Defines the entry point for the application.
-
-#include <iostream>
+﻿#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include <shellscalingapi.h>
+#include "platform_window.h"
+#include "dpi_manager.h"
+#include "gui_layer.h"
 #include <imgui.h>
-#include <imgui_impl_opengl3.h>
-#include <glfw3.h>
-#include <imgui_impl_glfw.h>
-#include <GL/gl.h>
 
-#define WINDOW_WIDTH		1280
-#define WINDOW_HEIGHT		720
-
-//glfw window object pointer
-static GLFWwindow* window = nullptr;
-
-// used to report errors
-static void GLFWErrorCallback(int error, const char* description) 
+int main()
 {
-	std::cout << "GLFW Error " << description << "code: " << error << "\n";
-}
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    if (!glfwInit()) return -1;
 
-int main() 
-{
-	//Initialize glfw window
-	if (!glfwInit()) 
-	{
-		std::cout << "Failed to initialize GLFW!\n";
-		std::cin.get();
-	}
+    PlatformWindow window(1280, 720, "ImGui DPI Demo");
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) return -1;
 
-	//appoints the function used to report errors
-	glfwSetErrorCallback(GLFWErrorCallback);
+    GuiLayer    gui;
+    gui.init(window.glfw());
 
-	//creating and appointing window
-	window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "ImGui", nullptr, nullptr);
+    ImGui::GetIO().UserData = new DpiManager(window.glfw()); // own the manager
+    auto* dpi = static_cast<DpiManager*>(ImGui::GetIO().UserData);
 
-	//making the current glfw context the created window
-	glfwMakeContextCurrent(window);
+    while (!window.shouldClose())
+    {
+        window.pollEvents();
+        dpi->newFrame(ImGui::GetIO());                       // rebuild if needed
+        int fbw, fbh; window.getFramebufferSize(fbw, fbh);
+        ImGui::GetIO().DisplaySize = { fbw / dpi->scale(), fbh / dpi->scale() };
 
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO();
-	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable docking
+        gui.begin();
+        gui.render();
+        gui.end();
 
+        window.swapBuffers();
+        glViewport(0, 0, fbw, fbh);
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
 
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
-	ImGui_ImplOpenGL3_Init();
-
-	ImVec4 clearcolor = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-	while (!glfwWindowShouldClose(window))
-	{
-		glfwPollEvents();
-
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-
-		ImGui::Begin("Hello World");
-		ImGui::Text("text");
-		ImGui::End();
-
-		ImGui::Begin("Hello World2");
-		ImGui::Button("button");
-		ImGui::Text("text2");
-		ImGui::End();
-
-		ImGui::Render();
-		int display_width, display_height;
-		glfwGetFramebufferSize(window, &display_width, &display_height);
-		glViewport(0, 0, display_width, display_height);
-		glClearColor(clearcolor.x * clearcolor.w, clearcolor.y * clearcolor.w, clearcolor.z * clearcolor.w, clearcolor.w);
-		glClear(GL_COLOR_BUFFER_BIT);
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-		glfwSwapBuffers(window);
-
-	}
-
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
-
-	if (window) 
-	{
-		glfwDestroyWindow(window);
-	}
-	glfwTerminate();
-
+    gui.shutdown();
+    delete dpi;
+    glfwTerminate();
+    return 0;
 }
