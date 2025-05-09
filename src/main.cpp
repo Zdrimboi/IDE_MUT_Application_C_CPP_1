@@ -3,9 +3,9 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <shellscalingapi.h>
-#include "platform_window.h"
-#include "dpi_manager.h"
-#include "gui_layer.h"
+#include "platform/platform_window.h"
+#include "platform/dpi_manager.h"
+#include "gui/gui_layer.h"
 #include <imgui.h>
 
 int main()
@@ -13,7 +13,7 @@ int main()
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     if (!glfwInit()) return -1;
 
-    PlatformWindow window(1280, 720, "ImGui DPI Demo");
+    PlatformWindow window(1280, 720, "ImGui DPI Demo (v1.3)");
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) return -1;
 
     GuiLayer    gui;

@@ -4,7 +4,7 @@
 cmake_minimum_required (VERSION 3.8)
 
 # Add source to this project's executable
-add_executable(mut "mut.cpp")
+add_executable(mut "main.cpp")
 
 # Include directories
 target_include_directories(mut PRIVATE
@@ -36,7 +36,7 @@ target_sources(mut PRIVATE
     ${CMAKE_SOURCE_DIR}/src/imgui/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/src/imgui/imgui_impl_opengl3.cpp
     ${CMAKE_SOURCE_DIR}/src/glad/glad.c
- "platform_window.cpp" "dpi_manager.cpp" "gui_layer.cpp")
+ "platform/platform_window.cpp" "platform/dpi_manager.cpp" "GUI/gui_layer.cpp" )
 
 # Copy DLLs to the output directory
 add_custom_command(TARGET mut POST_BUILD
