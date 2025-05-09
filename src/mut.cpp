@@ -3,8 +3,7 @@
 #include <iostream>
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
-#include <GLFW/glfw3.h>
-
+#include <glfw3.h>
 #include <imgui_impl_glfw.h>
 #include <GL/gl.h>
 
@@ -39,6 +38,9 @@ int main()
 	glfwMakeContextCurrent(window);
 
 	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable docking
+
 
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init();

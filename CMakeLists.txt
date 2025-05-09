@@ -11,4 +11,4 @@ endif()
 project ("mut")
 
 # Include sub-projects.
-add_subdirectory ("mut")
+add_subdirectory ("src")
