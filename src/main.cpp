@@ -13,7 +13,7 @@ int main()
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     if (!glfwInit()) return -1;
 
-    PlatformWindow window(1280, 720, "MUT Demo (v1.4)");
+    PlatformWindow window(1280, 720, "MUT Demo (v1.5)");
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) return -1;
 
     GuiLayer    gui;

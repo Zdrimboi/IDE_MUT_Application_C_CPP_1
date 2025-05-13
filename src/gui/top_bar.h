@@ -2,11 +2,13 @@
 
 #include <functional>
 #include <imgui.h>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 class TopBar
 {
 public:
-    // public callbacks you can assign from your app
     std::function<void()> onNewProject;
     std::function<void()> onOpenFile;
     std::function<void()> onSaveAll;
@@ -15,14 +17,17 @@ public:
     std::function<void()> onUndo;
     std::function<void()> onRedo;
 
-    void draw(const char* titleText = "My IDE (v1.4)")
+    // New: pending dock requests (pop back)
+    std::vector<std::pair<std::string, ImGuiID>> pendingRedocks;
+
+    void draw(const std::unordered_map<std::string, ImGuiID>& dockTargets,
+        const char* titleText = "My IDE (v1.5)")
     {
         if (!ImGui::BeginMainMenuBar())
             return;
 
-        // left‑aligned label (disabled menu item style)
         ImGui::TextUnformatted(titleText);
-        ImGui::Dummy(ImVec2(20.0f, 0.0f)); // little spacer
+        ImGui::Dummy(ImVec2(20.0f, 0.0f)); // spacer
 
         if (ImGui::BeginMenu("File"))
         {
@@ -39,6 +44,23 @@ public:
         {
             if (ImGui::MenuItem("Undo\tCtrl+Z", nullptr, false, onUndo != nullptr)) if (onUndo) onUndo();
             if (ImGui::MenuItem("Redo\tCtrl+Y", nullptr, false, onRedo != nullptr)) if (onRedo) onRedo();
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("View"))
+        {
+            for (const auto& [label, dockId] : dockTargets)
+            {
+                if (ImGui::MenuItem(("Pop back " + label).c_str()))
+                    pendingRedocks.emplace_back(label, dockId);
+            }
+
+            if (ImGui::MenuItem("Pop back all"))
+            {
+                for (const auto& [label, dockId] : dockTargets)
+                    pendingRedocks.emplace_back(label, dockId);
+            }
+
             ImGui::EndMenu();
         }
 
