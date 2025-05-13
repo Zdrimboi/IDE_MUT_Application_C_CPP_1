@@ -8,14 +8,20 @@
 #include <gui/top_bar.h>
 #include <gui/editor_panel.h>
 
-FileExplorer explorer{ std::filesystem::current_path() };
+FileManagerPanel  fm{ fs::current_path() };
 TopBar topBar;
-EditorPanel editorPanel;
+EditorPanel       editor;
+
 
 void GuiLayer::init(void* win)
 {
-    explorer.setRootPath("C:/");
-
+    fm.setOpenFileCallback([&](const fs::path& p)
+        {
+            std::ifstream ifs(p, std::ios::binary);
+            std::string   txt((std::istreambuf_iterator<char>(ifs)),
+                std::istreambuf_iterator<char>());
+            editor.setText(std::move(txt));
+        });
     IMGUI_CHECKVERSION(); ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
@@ -34,9 +40,9 @@ void GuiLayer::begin()
 void GuiLayer::render()
 {
     ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
-    explorer.draw();
+    fm.draw();
 	topBar.draw();
-	editorPanel.draw();
+    editor.draw();
 }
 
 void GuiLayer::end()
