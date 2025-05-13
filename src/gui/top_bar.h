@@ -15,7 +15,7 @@ public:
     std::function<void()> onUndo;
     std::function<void()> onRedo;
 
-    void draw(const char* titleText = "My IDE (v1.3)")
+    void draw(const char* titleText = "My IDE (v1.4)")
     {
         if (!ImGui::BeginMainMenuBar())
             return;
