@@ -22,8 +22,10 @@ target_link_directories(mut PRIVATE ${CMAKE_SOURCE_DIR}/lib/GLFW)
 # Link libraries
 target_link_libraries(mut PRIVATE
     glfw3.lib
-    opengl32.lib # OpenGL is provided by the system on Windows
+    opengl32.lib
     Shcore.lib
+    treesitter_grammars
+    libclang
 )
 
 # Add ImGui source files
@@ -41,5 +43,11 @@ target_sources(mut PRIVATE
 # Copy DLLs to the output directory
 add_custom_command(TARGET mut POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    ${CMAKE_SOURCE_DIR}/dll/glfw3.dll $<TARGET_FILE_DIR:mut>
-)
+            ${CMAKE_SOURCE_DIR}/dll/glfw3.dll
+            $<TARGET_FILE_DIR:mut>)
+
+# Copy libclang in a platform-independent way
+add_custom_command(TARGET mut POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:libclang>
+            $<TARGET_FILE_DIR:mut>)
