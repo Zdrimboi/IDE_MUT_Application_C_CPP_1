@@ -38,6 +38,11 @@ public:
         m_selectedPath = m_root;
     }
 
+	void GetRoot(fs::path& root) const
+	{
+		root = m_root;
+	}
+
     void setOpenFileCallback(std::function<void(const fs::path&)> cb) { m_openFileCB = std::move(cb); }
 
     // -----------------------------------------------------------------------------
