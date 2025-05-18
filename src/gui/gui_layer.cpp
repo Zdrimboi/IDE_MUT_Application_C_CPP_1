@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 
 /* ─── panels ───────────────────────────────────────────────────────────────── */
 FileManagerPanel fm{ fs::current_path() };
-EditorPanel      editor;
+ed::EditorPanel      editor;
 TopBar           topBar{fm};
 SymbolsPanel     symbols;
 InspectorPanel   inspector;
