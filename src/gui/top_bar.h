@@ -1,23 +1,19 @@
 ﻿#pragma once
-#include <iostream>
+
 #include <functional>
 #include <imgui.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <gui/filemanager_panel.h>
-#include <platform/pickfolder.h>
 
 class TopBar
 {
 public:
-	explicit TopBar(FileManagerPanel& fm)
-		: m_fileManager(fm)
-	{
-	}
     std::function<void()> onNewProject;
+    std::function<void()> onOpenFile;
     std::function<void()> onSaveAll;
     std::function<void()> onExit;
+
     std::function<void()> onUndo;
     std::function<void()> onRedo;
 
@@ -36,7 +32,7 @@ public:
         if (ImGui::BeginMenu("File"))
         {
             if (ImGui::MenuItem("New Project\tCtrl+Shift+N")) if (onNewProject) onNewProject();
-			if (ImGui::MenuItem("Open Folder\tCtrl+O"))           onOpenFolder();
+            if (ImGui::MenuItem("Open…\tCtrl+O"))           if (onOpenFile)   onOpenFile();
             ImGui::Separator();
             if (ImGui::MenuItem("Save All\tCtrl+Shift+S")) if (onSaveAll)    onSaveAll();
             ImGui::Separator();
@@ -70,13 +66,4 @@ public:
 
         ImGui::EndMainMenuBar();
     }
-private:
-	FileManagerPanel& m_fileManager;
-    void onOpenFolder()
-    {
-		std::cout << "Open Folder clicked\n";
-        if (auto folder = PickFolder())        // shows the dialog
-            m_fileManager.setRoot(*folder);    // user picked something
-    }
-
 };
