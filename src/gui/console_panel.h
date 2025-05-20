@@ -36,7 +36,7 @@ private:
     static constexpr size_t kMaxLines = 500;
     std::deque<std::string> lines_ = {
         "[info] Console ready.",
-        "[info] Build succeeded (0.13 s)."
+        "[info] Build succeeded (0.123 s)."
     };
     bool autoScroll_ = true;
 };
