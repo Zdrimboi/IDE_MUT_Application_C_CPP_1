@@ -1,312 +1,273 @@
-﻿// EditorPanel.hpp ────────────────────────────────────────────────────────────
-// • ImGui‐based code editor with Tree-sitter C/C++ syntax colouring.
-// • Minimal typing (add/delete char), line numbers, scrollable, tabbed files.
-// • No runtime crashes – uses ts_parser_parse_string_encoding (no custom TSInput).
-//
-// Requirements
-//   imgui >= 1.89  (and IMGUI_DEFINE_MATH_OPERATORS enabled)
-//   Tree-sitter runtime + C++ grammar objects
-//     ├─ tree-sitter-cpp/src/parser.c
-//     └─ tree-sitter-cpp/src/scanner.cc
-//   Build both objects and link them plus the core tree-sitter library.
-//
-// ---------------------------------------------------------------------------
-#pragma once
-
-// ImGui math operators (ImVec2 + ImVec2 etc.)
-#include <imgui.h>
-#include <imgui_internal.h>
+﻿#pragma once
 
 #include <string>
 #include <vector>
-#include <fstream>
 #include <filesystem>
-static inline ImVec2 operator+(const ImVec2& a, const ImVec2& b)
+#include <fstream>
+#include <algorithm>
+#include <imgui.h>
+#include "TextEditor.h"
+
+/* ---------------------------------------------------------------------------
+ *  EditorPanel  —  flicker-free tabs, persistent Save/Save-As,
+ *                  automatic pinned-on-the-left, real-time dirty tracking
+ * -------------------------------------------------------------------------*/
+class EditorPanel
 {
-    return { a.x + b.x, a.y + b.y };
-}
+public:
+    EditorPanel()
+    {
+        // prepare common language definition
+        TextEditor::LanguageDefinition lang = TextEditor::LanguageDefinition::CPlusPlus();
+        // you can insert identifiers or preprocessor symbols here if needed
+        m_language = lang;
+    }
 
-// ── Tree-sitter C API & C++ language symbol
-extern "C" {
-#include <tree_sitter/api.h>
-    const TSLanguage* tree_sitter_cpp();
-}
-
-namespace ed {
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // Helper types
-    // ──────────────────────────────────────────────────────────────────────────
-    struct Span {                 // a coloured token on one visual line
-        uint32_t start;           // starting column (byte offset in UTF-8)
-        uint32_t end;             // end column (exclusive) or UINT32_MAX for “to EOL”
-        ImU32    colour;          // ImGui RGBA
-    };
-
-    static constexpr float LINE_PAD = 2.0f;  // vertical spacing
-    static constexpr float GUTTER_WIDTH = 46.0f; // space for line numbers
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // Tree-sitter wrapper (parser + query + cursor)
-    // ──────────────────────────────────────────────────────────────────────────
-    struct TSWrap {
-        TSParser* parser = nullptr;
-        TSTree* tree = nullptr;
-        TSQuery* query = nullptr;
-        TSQueryCursor* cursor = nullptr;
-
-        TSWrap() {
-            parser = ts_parser_new();
-            ts_parser_set_language(parser, tree_sitter_cpp());
-
-            // tiny highlight query (comment / string / number / type / func / ident)
-            static const char* Q = R"(
-            (comment)                 @c
-            (string_literal)          @s
-            (number_literal)          @n
-            (type_identifier)         @t
-            (call_expression
-               function: (identifier) @f)
-            (identifier)              @i
-        )";
-            uint32_t offset; TSQueryError err;
-            query = ts_query_new(tree_sitter_cpp(), Q,
-                (uint32_t)strlen(Q), &offset, &err);
-            cursor = ts_query_cursor_new();
-        }
-
-        ~TSWrap() {
-            if (tree) ts_tree_delete(tree);
-            ts_query_cursor_delete(cursor);
-            ts_query_delete(query);
-            ts_parser_delete(parser);
-        }
-    };
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // EditorPanel  –  multiple tabs of “File” objects
-    // ──────────────────────────────────────────────────────────────────────────
-    class EditorPanel {
-    public:
-        // open a file from disk
-        void openFile(const std::filesystem::path& p) {
-            std::ifstream fs(p, std::ios::binary);
-            if (!fs) return;
-            std::string txt((std::istreambuf_iterator<char>(fs)), {});
-            files.emplace_back(nextId++, p.string(), std::move(txt));
-            focusNext = files.back().id;
-        }
-
-        // main ImGui draw call
-        void draw(const char* title = "Editor") {
-            if (!ImGui::Begin(title)) { ImGui::End(); return; }
-
-            if (files.empty()) {
-                ImGui::TextDisabled("No files open");
-                ImGui::End();
-                return;
-            }
-
-            if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_Reorderable)) {
-                int closeIdx = -1;
-
-                for (int i = 0; i < (int)files.size(); ++i) {
-                    File& f = files[i];
-                    ImGuiTabItemFlags flags = f.dirty ? ImGuiTabItemFlags_UnsavedDocument : 0;
-                    if (f.id == focusNext) flags |= ImGuiTabItemFlags_SetSelected;
-
-                    bool tabOpen = true;
-                    if (ImGui::BeginTabItem(f.displayName().c_str(), &tabOpen, flags)) {
-                        activeId = f.id;
-                        f.render();
-                        ImGui::EndTabItem();
-                    }
-                    if (!tabOpen) closeIdx = i;
-                }
-
-                ImGui::EndTabBar();
-                if (closeIdx >= 0) files.erase(files.begin() + closeIdx);
-            }
-            focusNext = -1;
-            ImGui::End();
-        }
-
-    private:
-        // ──────────────────────────────────────────────────────────────────
-        //  nested File struct – one open buffer
-        // ──────────────────────────────────────────────────────────────────
-        struct File {
-            // core data
-            std::string path;
-            std::string buf;
-            std::string original;
-            int  id;
-            bool dirty = false;
-
-            // helpers
-            std::vector<size_t>            lineStart; // byte offset per line
-            std::vector<std::vector<Span>> spans;     // colour spans per line
-            TSWrap ts;
-
-            File(int iid, std::string p, std::string b)
-                : path(std::move(p)), buf(std::move(b)), original(buf), id(iid)
+    /*--- Public API ---*/
+    void openFile(const std::filesystem::path& path)
+    {
+        std::string fullPath = path.string();
+        for (auto& f : m_files)
+        {
+            if (f.path == fullPath)
             {
-                indexLines();
-                parse();
+                m_focus_next_id = f.id;          // focus the already-open tab next frame
+                return;                          // already open
             }
+        }
 
-            // file name to show on tab
-            std::string displayName() const {
-                return path.empty() ? "Untitled"
-                    : std::filesystem::path(path).filename().string();
-            }
+        std::ifstream ifs(path, std::ios::binary);
+        if (!ifs) return;
 
-            // rebuild lineStart table
-            void indexLines() {
-                lineStart.clear();
-                lineStart.push_back(0);
-                for (size_t i = 0; i < buf.size(); ++i)
-                    if (buf[i] == '\n') lineStart.push_back(i + 1);
-            }
+        std::string content((std::istreambuf_iterator<char>(ifs)), {});
 
-            // parse buffer with Tree-sitter
-            void parse() {
-                TSTree* nt = ts_parser_parse_string_encoding(
-                    ts.parser,
-                    ts.tree,
-                    buf.c_str(),
-                    (uint32_t)buf.size(),
-                    TSInputEncodingUTF8);
+        FileEntry f;
+        f.path = fullPath;
+        f.id = m_nextId++;
+        f.pinned = false;
+        f.editor.SetLanguageDefinition(m_language);
+        f.editor.SetText(content);
+        f.original = content;
+        m_files.push_back(std::move(f));
+        resortPinned();                          // keep pins left
 
-                if (ts.tree) ts_tree_delete(ts.tree);
-                ts.tree = nt;
-                buildSpanCache();
-            }
+        m_focus_next_id = m_files.back().id;     // one-shot focus request
+    }
 
-            // build colour-span cache using highlight query
-            void buildSpanCache() {
-                spans.assign(lineStart.size(), {});
-                ts_query_cursor_exec(ts.cursor, ts.query, ts_tree_root_node(ts.tree));
+    /*------------------------------------------------------------
+     *  Main draw (call every frame)
+     *----------------------------------------------------------*/
+    void draw(const char* title = "Editor")
+    {
+        if (!ImGui::Begin(title)) { ImGui::End(); return; }
 
-                TSQueryMatch m;
-                while (ts_query_cursor_next_match(ts.cursor, &m)) {
-                    for (uint32_t c = 0; c < m.capture_count; ++c) {
-                        const auto& cap = m.captures[c];
-                        TSPoint s = ts_node_start_point(cap.node);
-                        TSPoint e = ts_node_end_point(cap.node);
-                        ImU32 col = colour(cap.index);
+        if (m_files.empty())
+        {
+            ImGui::TextDisabled("No files open – drag a file here or use Ctrl+O");
+            ImGui::End();
+            return;
+        }
 
-                        if (s.row == e.row) {
-                            spans[s.row].push_back({ s.column, e.column, col });
+        /*  Make sure pinned tabs stay on the left every frame.        */
+        resortPinned();
+
+        if (ImGui::BeginTabBar("EditorTabs", ImGuiTabBarFlags_Reorderable))
+        {
+            int pendingClose = -1;
+
+            for (int i = 0; i < (int)m_files.size(); ++i)
+            {
+                FileEntry& file = m_files[i];
+
+                ImGuiTabItemFlags tif = 0;
+                if (file.dirty) tif |= ImGuiTabItemFlags_UnsavedDocument;
+
+                /* One-shot programmatic focus */
+                if (file.id == m_focus_next_id)
+                    tif |= ImGuiTabItemFlags_SetSelected;
+
+                bool tabOpen = true;
+                bool selected = ImGui::BeginTabItem(file.tabLabel().c_str(),
+                    file.pinned ? nullptr : &tabOpen,
+                    tif);
+
+                if (!tabOpen && !file.pinned)
+                    pendingClose = i; // close requested
+
+                if (selected)
+                {
+                    /*  ►► This is the ONLY place we set the active id ◄◄  */
+                    m_active_id = file.id;
+
+                    // context menu
+                    if (ImGui::BeginPopupContextItem())
+                    {
+                        if (ImGui::MenuItem("Save", nullptr, false, file.dirty)) saveFile(file);
+                        if (ImGui::MenuItem("Save As…"))                  saveFileAs(file);
+                        if (ImGui::MenuItem("Open Containing Folder"))   openFolder(file);
+                        ImGui::Separator();
+                        if (ImGui::MenuItem(file.pinned ? "Unpin" : "Pin"))
+                        {
+                            file.pinned = !file.pinned;
+                            resortPinned();
                         }
-                        else {
-                            spans[s.row].push_back({ s.column, UINT32_MAX, col });
-                            for (uint32_t r = s.row + 1; r < e.row; ++r)
-                                spans[r].push_back({ 0, UINT32_MAX, col });
-                            spans[e.row].push_back({ 0, e.column, col });
-                        }
+                        if (!file.pinned && ImGui::MenuItem("Close"))
+                            pendingClose = i;
+                        ImGui::EndPopup();
                     }
+
+                    // --- TextEditor rendering ---
+                    auto cpos = file.editor.GetCursorPosition();
+                    // Use c_str() because Render expects const char*
+                    file.editor.Render(file.tabLabel().c_str());
+                    file.dirty = (file.editor.GetText() != file.original);
+
+                    ImGui::EndTabItem();
+                }
+
+                /* Clear one-shot focus once processed */
+                if (m_focus_next_id == file.id)
+                    m_focus_next_id = -1;
+            }
+            ImGui::EndTabBar();
+
+            if (pendingClose >= 0 && pendingClose < (int)m_files.size())
+            {
+                FileEntry& f = m_files[pendingClose];
+                if (f.dirty)
+                {
+                    m_pendingCloseIndex = pendingClose;
+                    ImGui::OpenPopup("UnsavedChanges");
+                }
+                else
+                {
+                    removeAt(pendingClose);
                 }
             }
+        }
 
-            // colour palette
-            static ImU32 colour(uint32_t cap) {
-                switch (cap) {
-                case 0: return IM_COL32(128, 128, 128, 255);  // comment
-                case 1: return IM_COL32(220, 150, 130, 255);  // string
-                case 2: return IM_COL32(180, 220, 130, 255);  // number
-                case 3: return IM_COL32(96, 175, 255, 255);  // type
-                case 4: return IM_COL32(200, 200, 110, 255);  // func
-                default:return IM_COL32_WHITE;
+        // unsaved changes popup same as before...
+        if (m_pendingCloseIndex >= 0 && m_pendingCloseIndex < (int)m_files.size())
+        {
+            if (ImGui::BeginPopupModal("UnsavedChanges", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                FileEntry& file = m_files[m_pendingCloseIndex];
+                ImGui::Text("The file '%s' has unsaved changes.",
+                    file.displayName().c_str());
+                ImGui::Text("What would you like to do?");
+                ImGui::Separator();
+
+                if (ImGui::Button("Save"))
+                {
+                    saveFile(file);
+                    m_pendingCloseIndex = -1;
+                    ImGui::CloseCurrentPopup();
                 }
+                ImGui::SameLine();
+                if (ImGui::Button("Save As"))
+                {
+                    saveFileAs(file);
+                    m_pendingCloseIndex = -1;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Don't Save - Close"))
+                {
+                    removeAt(m_pendingCloseIndex);
+                    m_pendingCloseIndex = -1;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel"))
+                {
+                    m_pendingCloseIndex = -1;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
             }
+        }
 
-            // ImGui rendering
-            void render() {
-                if (lineStart.empty()) {
-                    ImGui::TextDisabled("// empty file");
-                    ImGui::EndChild();
-                    return;
-                }
-                // simple typing: append char / backspace
-                if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
-                    auto& io = ImGui::GetIO();
-                    for (ImWchar ch : io.InputQueueCharacters) {
-                        if (ch == '\b') { if (!buf.empty()) buf.pop_back(); }
-                        else { buf.push_back((char)ch); }
-                        dirty = true;
-                    }
-                    io.InputQueueCharacters.resize(0);
-                }
-                if (dirty) { indexLines(); parse(); dirty = false; }
+        ImGui::End();
+    }
 
-                ImGui::BeginChild("##code",
-                    ImVec2(0, 0),
-                    false,
-                    ImGuiWindowFlags_HorizontalScrollbar);
+private:
+    /*------------------------------------------------------------
+     *  FileEntry helper struct
+     *----------------------------------------------------------*/
+    struct FileEntry
+    {
+        std::string path;
+        TextEditor editor;
+        std::string original;
+        int  id = 0;
+        bool dirty = false;
+        bool pinned = false;
 
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                ImVec2 origin = ImGui::GetCursorScreenPos();
-                float lineH = ImGui::GetTextLineHeight() + LINE_PAD;
-
-                ImGuiListClipper clip;
-                clip.Begin(static_cast<int>(lineStart.size()),
-                    ImGui::GetTextLineHeight() + LINE_PAD);   // << explicit item height
-                while (clip.Step()) {
-                    for (int l = clip.DisplayStart; l < clip.DisplayEnd; ++l) {
-                        size_t sb = lineStart[l];
-                        size_t eb = (l + 1 < lineStart.size() ? lineStart[l + 1] : buf.size());
-                        std::string_view ln(&buf[sb], eb - sb);
-
-                        // line number
-                        char num[8]; sprintf(num, "%4d", l + 1);
-                        dl->AddText(
-                            origin + ImVec2(0, l * lineH),
-                            IM_COL32(150, 150, 150, 255),
-                            num);
-
-                        // coloured text
-                        float  x = origin.x + GUTTER_WIDTH;
-                        size_t cur = 0;
-                        for (const auto& sp : spans[l]) {
-                            size_t segEnd = std::min<size_t>(sp.start, ln.size());
-                            if (segEnd > cur) {
-                                auto sv = ln.substr(cur, segEnd - cur);
-                                dl->AddText(
-                                    { x, origin.y + l * lineH },
-                                    IM_COL32_WHITE,
-                                    sv.data(), sv.data() + sv.size());
-                                x += ImGui::CalcTextSize(sv.data(), sv.data() + sv.size()).x;
-                            }
-                            size_t end = (sp.end == UINT32_MAX ? ln.size() : sp.end);
-                            if (end > cur) {
-                                auto sv = ln.substr(sp.start, end - sp.start);
-                                dl->AddText(
-                                    { x, origin.y + l * lineH },
-                                    sp.colour,
-                                    sv.data(), sv.data() + sv.size());
-                                x += ImGui::CalcTextSize(sv.data(), sv.data() + sv.size()).x;
-                            }
-                            cur = end;
-                        }
-                        if (cur < ln.size()) {
-                            dl->AddText(
-                                { x, origin.y + l * lineH },
-                                IM_COL32_WHITE,
-                                ln.data() + cur, ln.data() + ln.size());
-                        }
-                    }
-                }
-                clip.End();
-                ImGui::EndChild();
-            }
-        };
-
-        // panel state
-        std::vector<File> files;
-        int nextId = 1;
-        int focusNext = -1;
-        int activeId = -1;
+        std::string displayName() const
+        {
+            if (path.empty()) return "Untitled";
+            return std::filesystem::path(path).filename().string();
+        }
+        std::string tabLabel() const
+        {
+            std::string label;
+            if (pinned) label += "\xF0\x9F\x93\x8C "; // 📌
+            label += displayName();
+            if (dirty) label += " *";
+            label += "###" + std::to_string(id);
+            return label;
+        }
     };
 
-} // namespace ed
+    void resortPinned()
+    {
+        std::stable_partition(m_files.begin(), m_files.end(),
+            [](const FileEntry& e) { return e.pinned; });
+    }
+
+    void removeAt(int idx)
+    {
+        if (idx < 0 || idx >= (int)m_files.size()) return;
+        m_files.erase(m_files.begin() + idx);
+        if (!m_files.empty())
+            m_focus_next_id = m_files.front().id;
+        else
+            m_active_id = -1;
+    }
+
+    void saveFile(FileEntry& file)
+    {
+        if (file.path.empty()) { saveFileAs(file); return; }
+        std::ofstream ofs(file.path, std::ios::binary);
+        if (!ofs) return;
+        auto txt = file.editor.GetText();
+        ofs.write(txt.data(), txt.size());
+        file.original = txt;
+        file.dirty = false;
+    }
+    void saveFileAs(FileEntry& file)
+    {
+        if (file.path.empty()) file.path = "newfile.txt";
+        saveFile(file);
+    }
+    void openFolder(const FileEntry& file)
+    {
+        if (file.path.empty()) return;
+#ifdef _WIN32
+        std::string cmd = "explorer /select,\"" + file.path + "\"";
+#elif __APPLE__
+        std::string cmd = "open -R \"" + file.path + "\"";
+#else
+        std::string cmd = "xdg-open \"" +
+            std::filesystem::path(file.path).parent_path().string() + "\"";
+#endif
+        system(cmd.c_str());
+    }
+
+    std::vector<FileEntry> m_files;
+    TextEditor::LanguageDefinition m_language;
+    int  m_nextId = 1;
+    int  m_active_id = -1;
+    int  m_focus_next_id = -1;
+    int  m_pendingCloseIndex = -1;
+};

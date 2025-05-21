@@ -30,7 +30,8 @@ target_sources(mut PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/glad/glad.c
     ${CMAKE_CURRENT_SOURCE_DIR}/platform/platform_window.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/platform/dpi_manager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/GUI/gui_layer.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/GUI/gui_layer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/GUI/TextEditor.cpp)
 
 target_link_directories(mut PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/GLFW

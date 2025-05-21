@@ -22,16 +22,11 @@ namespace fs = std::filesystem;
 
 /* ─── panels ───────────────────────────────────────────────────────────────── */
 FileManagerPanel fm{ fs::current_path() };
-ed::EditorPanel      editor;
+EditorPanel      editor;
 TopBar           topBar{fm};
 SymbolsPanel     symbols;
 InspectorPanel   inspector;
 ConsolePanel     console;
-
-/* ─── window classes ───────────────────────────────────────────────────────── */
-static ImGuiWindowClass CLASS_SIDE;
-static ImGuiWindowClass CLASS_BOTTOM;
-static ImGuiWindowClass CLASS_CENTER;
 
 /* ─── dock node tracking ───────────────────────────────────────────────────── */
 static std::unordered_map<std::string, ImGuiID> panelDockTargets;
@@ -51,16 +46,6 @@ void GuiLayer::init(void* win)
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
 
-    auto makeClass = [](ImGuiWindowClass& c, const char* tag)
-        {
-            c = ImGuiWindowClass();
-            c.ClassId = ImHashStr(tag);
-            c.DockingAllowUnclassed = true; // allow re-docking even if undocked
-        };
-    makeClass(CLASS_SIDE, "SidePane");
-    makeClass(CLASS_BOTTOM, "BottomPane");
-    makeClass(CLASS_CENTER, "CenterPane");
-
     ImGui_ImplGlfw_InitForOpenGL(static_cast<GLFWwindow*>(win), true);
     ImGui_ImplOpenGL3_Init();
 }
@@ -74,85 +59,82 @@ void GuiLayer::begin()
 
 void GuiLayer::render()
 {
-    const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(
-        vp->ID, vp,
-        ImGuiDockNodeFlags_PassthruCentralNode |
-        ImGuiDockNodeFlags_NoDockingInCentralNode);
+    // 1) full-screen host window
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->WorkPos);
+    ImGui::SetNextWindowSize(vp->WorkSize);
+    ImGui::SetNextWindowViewport(vp->ID);
 
-    static bool first = true;
-    static ImGuiID nodeL = 0, nodeR = 0, nodeB = 0, nodeC = 0;
+    ImGuiWindowFlags host_flags =
+        ImGuiWindowFlags_NoTitleBar
+        | ImGuiWindowFlags_NoResize
+        | ImGuiWindowFlags_NoMove
+        | ImGuiWindowFlags_NoCollapse
+        | ImGuiWindowFlags_NoDocking
+        | ImGuiWindowFlags_NoBringToFrontOnFocus
+        | ImGuiWindowFlags_NoNavFocus;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::Begin("##MainHost", nullptr, host_flags);
+    ImGui::PopStyleVar(2);
 
-    if (first)
+    // 2) one-time DockBuilder layout
+    static bool   dock_setup = false;
+    static float  left_ratio = 0.20f;  // 20% of width for File Manager
+    static float  bottom_ratio = 0.30f;  // bottom 30% of height for Editor+Symbols
+    static float  right_ratio = 0.25f;  // right 25% of that bottom stripe for Symbols/Inspector
+    // 2) one-time DockBuilder layout (swap Console & Editor + move Symbols/Inspector above Console)
+    if (!dock_setup)
     {
-        ImGui::DockBuilderRemoveNode(dockspace_id);
-        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-        ImGui::DockBuilderSetNodeSize(dockspace_id, vp->Size);
+        dock_setup = true;
 
-        nodeL = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.22f, nullptr, &dockspace_id);
-        nodeB = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.28f, nullptr, &nodeC);
-        nodeR = ImGui::DockBuilderSplitNode(nodeC, ImGuiDir_Right, 0.25f, nullptr, &nodeC);
+        ImGuiID dock_id = ImGui::GetID("MainDockSpace");
+        ImGui::DockBuilderRemoveNode(dock_id);
+        ImGui::DockBuilderAddNode(dock_id, ImGuiDockNodeFlags_None);
+        ImGui::DockBuilderSetNodeSize(dock_id, vp->WorkSize);
 
-        // Lock center node for the editor
-        ImGuiDockNode* centerNode = ImGui::DockBuilderGetNode(nodeC);
-        centerNode->LocalFlags |= ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoSplit;
+        // a) split root → left (File Manager) + right (everything else)
+        ImGuiID id_fileMgr, id_right;
+        ImGui::DockBuilderSplitNode(dock_id, ImGuiDir_Left, left_ratio, &id_fileMgr, &id_right);
 
-        panelDockTargets = {
-            { "File Manager", nodeL },
-            { "Inspector",    nodeR },
-            { "Symbols",      nodeR },
-            { "Console",      nodeB },
-            { "Editor",       nodeC }
-        };
+        // b) split right → top (Editor+Symbols) + bottom (Console)
+        ImGuiID id_console, id_top;
+        ImGui::DockBuilderSplitNode(id_right, ImGuiDir_Down, bottom_ratio, &id_console, &id_top);
 
-        ImGui::DockBuilderDockWindow("File Manager", nodeL);
-        ImGui::DockBuilderDockWindow("Inspector", nodeR);
-        ImGui::DockBuilderDockWindow("Symbols", nodeR);
-        ImGui::DockBuilderDockWindow("Console", nodeB);
-        ImGui::DockBuilderDockWindow("Editor", nodeC);
+        // c) split the top region → left (Editor) + right (Symbols/Inspector)
+        ImGuiID id_symbols, id_editor;
+        ImGui::DockBuilderSplitNode(id_top, ImGuiDir_Right, right_ratio, &id_symbols, &id_editor);
 
-        ImGui::DockBuilderFinish(dockspace_id);
-        first = false;
+        // d) dock your windows into each node
+        ImGui::DockBuilderDockWindow("File Manager", id_fileMgr);
+        ImGui::DockBuilderDockWindow("Editor", id_editor);
+        ImGui::DockBuilderDockWindow("Console", id_console);
+        ImGui::DockBuilderDockWindow("Symbols", id_symbols);
+        ImGui::DockBuilderDockWindow("Inspector", id_symbols);
+
+        ImGui::DockBuilderFinish(dock_id);
     }
 
-    // Assign window classes before rendering
-    ImGui::SetNextWindowClass(&CLASS_SIDE);    fm.draw("File Manager");
-    ImGui::SetNextWindowClass(&CLASS_SIDE);    symbols.draw("Symbols");
-    ImGui::SetNextWindowClass(&CLASS_SIDE);    inspector.draw("Inspector");
-    ImGui::SetNextWindowClass(&CLASS_BOTTOM);  console.draw("Console");
-    ImGui::SetNextWindowClass(&CLASS_CENTER);  editor.draw();
 
-    topBar.draw(panelDockTargets);
+    // 3) the actual dockspace
+    ImGui::DockSpace(
+        ImGui::GetID("MainDockSpace"),
+        ImVec2(0, 0),
+        ImGuiDockNodeFlags_PassthruCentralNode
+    );
 
-    for (const auto& [label, dockId] : topBar.pendingRedocks)
-    {
-        if (!ImGui::DockBuilderGetNode(dockId))
-        {
-            // Recreate the node and restore it to the hierarchy
-            ImGuiID root = ImGui::GetMainViewport()->ID;
+    // 4) draw your panels exactly as before
+    fm.draw("File Manager");
+    console.draw("Console");
+    editor.draw("Editor");
+    symbols.draw("Symbols");
+    inspector.draw("Inspector");
+    topBar.draw(panelDockTargets, "MUT Demo (v1.5)");
 
-            // Determine direction based on original target
-            if (dockId == panelDockTargets["File Manager"]) {
-                ImGui::DockBuilderSplitNode(root, ImGuiDir_Left, 0.22f, &panelDockTargets["File Manager"], &root);
-            }
-            else if (dockId == panelDockTargets["Console"]) {
-                ImGui::DockBuilderSplitNode(root, ImGuiDir_Down, 0.28f, &panelDockTargets["Console"], &root);
-            }
-            else if (dockId == panelDockTargets["Inspector"] || dockId == panelDockTargets["Symbols"]) {
-                ImGui::DockBuilderSplitNode(root, ImGuiDir_Right, 0.25f, &panelDockTargets["Inspector"], &root);
-                panelDockTargets["Symbols"] = panelDockTargets["Inspector"]; // Share nodeR
-            }
-            // Do not touch "Editor" — user requested it be fixed
-
-            ImGui::DockBuilderFinish(ImGui::GetMainViewport()->ID);
-        }
-
-        ImGui::DockBuilderDockWindow(label.c_str(), dockId);
-    }
-    topBar.pendingRedocks.clear();
-
-
+    ImGui::End();
 }
+
+
 
 
 void GuiLayer::end()

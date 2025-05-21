@@ -51,23 +51,6 @@ public:
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("View"))
-        {
-            for (const auto& [label, dockId] : dockTargets)
-            {
-                if (ImGui::MenuItem(("Pop back " + label).c_str()))
-                    pendingRedocks.emplace_back(label, dockId);
-            }
-
-            if (ImGui::MenuItem("Pop back all"))
-            {
-                for (const auto& [label, dockId] : dockTargets)
-                    pendingRedocks.emplace_back(label, dockId);
-            }
-
-            ImGui::EndMenu();
-        }
-
         ImGui::EndMainMenuBar();
     }
 private:
