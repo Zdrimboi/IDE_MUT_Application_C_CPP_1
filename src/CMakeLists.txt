@@ -16,6 +16,7 @@ target_include_directories(mut PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/KHR
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/third_party
+    ${CMAKE_CURRENT_SOURCE_DIR}/editor
 )
 
 # Add ImGui source files
@@ -31,7 +32,11 @@ target_sources(mut PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/platform/platform_window.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/platform/dpi_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/GUI/gui_layer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/GUI/TextEditor.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/editor/clang_indexer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/editor/syntax_highlighter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/editor/editor_window.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/editor/text_editor.cpp
+    )
 
 target_link_directories(mut PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/GLFW

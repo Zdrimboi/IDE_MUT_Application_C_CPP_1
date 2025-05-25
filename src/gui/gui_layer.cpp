@@ -12,17 +12,18 @@
 #include <unordered_map>
 
 #include <gui/filemanager_panel.h>
-#include <gui/editor_panel.h>
+#include <editor_window.h>
 #include <gui/top_bar.h>
 #include <gui/symbols_panel.h>
 #include <gui/inspector_panel.h>
 #include <gui/console_panel.h>
+#include <string>
 
 namespace fs = std::filesystem;
 
 /* ─── panels ───────────────────────────────────────────────────────────────── */
 FileManagerPanel fm{ fs::current_path() };
-EditorPanel      editor;
+EditorWindow     editor;
 TopBar           topBar{fm};
 SymbolsPanel     symbols;
 InspectorPanel   inspector;
@@ -33,13 +34,10 @@ static std::unordered_map<std::string, ImGuiID> panelDockTargets;
 
 void GuiLayer::init(void* win)
 {
-    fm.setOpenFileCallback([&](const fs::path& p)
-        {
-            std::ifstream ifs(p, std::ios::binary);
-            std::string txt((std::istreambuf_iterator<char>(ifs)),
-                std::istreambuf_iterator<char>());
-            editor.openFile(p);
+    fm.setOpenFileCallback([&](const fs::path& p) {
+        editor.OpenFile(p.string());
         });
+
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -126,7 +124,7 @@ void GuiLayer::render()
     // 4) draw your panels exactly as before
     fm.draw("File Manager");
     console.draw("Console");
-    editor.draw("Editor");
+    editor.Draw();
     symbols.draw("Symbols");
     inspector.draw("Inspector");
     topBar.draw(panelDockTargets, "MUT Demo (v1.5)");
