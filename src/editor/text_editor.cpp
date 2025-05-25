@@ -9,7 +9,7 @@
 #include "imgui_internal.h"
 #include <regex>
 
-//#define DEBUG_TEXTEDITOR
+#define DEBUG_TEXTEDITOR
 
 #ifdef DEBUG_TEXTEDITOR
 #include <cstdio>

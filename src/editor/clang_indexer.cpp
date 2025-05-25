@@ -9,7 +9,7 @@
 #include <chrono>
 #include <cstdarg>
 
-//#define DEBUG_CLANGINDEXER
+#define DEBUG_CLANGINDEXER
 #ifdef DEBUG_CLANGINDEXER
 #include <cstdio>
 

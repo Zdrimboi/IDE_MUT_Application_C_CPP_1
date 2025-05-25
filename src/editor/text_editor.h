@@ -65,6 +65,12 @@ public:
     void Draw();
     const std::string& GetContent() const;
     void SetContent(const std::string& content);
+    void MoveCursorTo(int line, int column)
+    {
+        cursor_.line = std::clamp(line, 0, (int)lines_.size() - 1);
+        cursor_.column = std::clamp(column, 0, (int)lines_[cursor_.line].size());
+        scrollToCursor_ = true;
+    }
 
 private:
     bool find_case_sensitive_ = false;
@@ -160,6 +166,8 @@ private:
     void DeleteChar();
     void InsertNewLine();
     void PasteText(const std::string& text);
+
+
     void UpdateContentFromLines(int start_line = -1, int end_line = -1);  // Updated signature
     void MoveCursorLeft();
     void MoveCursorRight();

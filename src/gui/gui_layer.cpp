@@ -10,14 +10,12 @@
 #include <filesystem>
 #include <fstream>
 #include <unordered_map>
-
 #include <gui/filemanager_panel.h>
 #include <editor_window.h>
 #include <gui/top_bar.h>
 #include <gui/symbols_panel.h>
 #include <gui/inspector_panel.h>
 #include <gui/console_panel.h>
-#include <string>
 
 namespace fs = std::filesystem;
 
@@ -28,6 +26,10 @@ TopBar           topBar{fm};
 SymbolsPanel     symbols;
 InspectorPanel   inspector;
 ConsolePanel     console;
+
+static struct _LinkSymbols {
+    _LinkSymbols() { editor.SetSymbolsPanel(&symbols); }
+} _link;
 
 /* ─── dock node tracking ───────────────────────────────────────────────────── */
 static std::unordered_map<std::string, ImGuiID> panelDockTargets;
